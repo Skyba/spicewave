@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Music visuals for any screen, driven by the sound of your Mac or PC, with a pomodoro timer.">
 <meta name="apple-mobile-web-app-title" content="Spicewave">
 <title>Spicewave</title>
 <style>
@@ -20,7 +22,7 @@
   #msg { position: fixed; bottom: calc(124px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px);
     box-sizing: border-box; padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,.7); text-align: center; }
   #pair { position: fixed; left: 20px; top: 20px; padding: 14px; border-radius: 16px; background: rgba(0,0,0,.75); text-align: center; transition: opacity .3s; }
-  #pair img { width: 168px; background: #fff; border-radius: 8px; display: block; margin: 0 auto 8px; image-rendering: pixelated; }
+  #pair img { width: 176px; background: #fff; border-radius: 8px; display: block; margin: 0 auto 8px; image-rendering: pixelated; }
   #pair a { color: #9cf; font-size: 12px; display: block; max-width: 220px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
   #msg { pointer-events: none; }
   #msg button { margin-top: 8px; pointer-events: auto; }
@@ -48,6 +50,13 @@
   #panel select { font: inherit; color: inherit; background: #2b2b33; border: 0; border-radius: 10px; height: 40px; padding: 0 10px; }
   #panel .row { display: flex; gap: 8px; margin-top: 6px; }
   #panel .row button { flex: 1; }
+  #status { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 6px 0 0; font-size: 14px; }
+  #status dt { opacity: .65; }
+  #status dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  #status .ok::before, #status .bad::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; background: #5ed39a; }
+  #status .bad::before { background: #ffb454; }
+  #meter { display: block; height: 8px; margin: 7px 0 0 auto; width: 130px; border-radius: 4px; background: rgba(255,255,255,.18); overflow: hidden; }
+  #meter i { display: block; height: 100%; width: 100%; background: #5ed39a; transform: scaleX(0); transform-origin: left; }
   .fav { display: flex; gap: 6px; margin-top: 6px; }
   .fav button:first-child { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { opacity: .65; font-size: 14px; margin: 8px 0; }
@@ -71,7 +80,8 @@
   #enter:active { background: #cfe5ff; }
   .idle #bar, .idle #pair { opacity: 0; pointer-events: none; }
   .idle { cursor: none; }
-  @media (min-width: 960px) { .set #bar { left: calc(50% - 180px); max-width: calc(100vw - 392px); } .set #ring { right: 378px; } }
+  .set #ring { visibility: hidden; }
+  @media (min-width: 760px) { .set #bar { left: calc(50% - 180px); max-width: calc(100vw - 392px); } .set #ring { right: 378px; visibility: visible; } }
   #panel.pom section:not(#pomset) { display: none; }
   #panel.pom #pomset h2 { display: none; }
   .set #pair { opacity: 0; pointer-events: none; }
@@ -81,7 +91,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="msg" hidden></div>
-<div id="pair" hidden><img src="" alt="QR code for the iPad"><div>Scan with the iPad</div></div>
+<div id="pair" hidden><img alt="QR code for the iPad"><div>Scan with the iPad</div></div>
 <div id="bar">
   <div id="name"></div>
   <button id="prev" aria-label="Previous visual">◀</button>
@@ -115,6 +125,10 @@
   <div class="row"><button id="pause">Pause</button><button id="skip">Skip</button><button id="restart">Restart</button></div>
   </section>
   <section>
+  <h2>Status</h2>
+  <dl id="status"><dt>Connection</dt><dd id="st-link"></dd><dt>Data</dt><dd id="st-data"></dd><dt>Sound</dt><dd><span id="meter"><i></i></span></dd>
+  <dt>Favorites</dt><dd id="st-fav"></dd><dt>Settings</dt><dd id="st-set"></dd><dt>Pomodoro</dt><dd>This device only</dd></dl>
+  <div class="row"><button id="unpair" hidden>Disconnect this device</button></div>
   <h2>Display</h2>
   <label class="slide">Delay to match the headset <output></output><input type="range" data-k="sync" data-u="ms" min="0" max="1000" step="25"></label>
   <label>Sharpness <select data-k="sharp"><option value="1">Low</option><option value="1.5">Medium</option><option value="2">High</option></select></label>
@@ -132,16 +146,31 @@
   <label><input type="checkbox" id="never"> Never show again</label>
   <button id="enter">Enter the app</button>
 </div></div>
+<script>if (location.protocol === 'http:' && location.hostname === 'bps.basilev.com') location.protocol = 'https:';</script>
+<script src="qrcode.js"></script>
 <script src="butterchurn.min.js"></script>
 <script src="butterchurnPresets.min.js"></script>
 <script src="butterchurnPresetsExtra.min.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const key = new URLSearchParams(location.search).get('k') || '';
+// The page runs in two places: served by the Mac app over plain http (the link carries its key), or from the site.
+const key = location.protocol === 'http:' ? new URLSearchParams(location.search).get('k') || '' : '';
+const onMac = !!key && location.hostname === 'localhost';
+const SITE = location.protocol === 'https:' || location.port === '8788' ? location.origin : 'https://bps.basilev.com';
 const store = {
   get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
 };
+// A device that scanned a pairing link receives; the link stays in the address so it survives "Add to Home Screen".
+const isRoom = r => /^[0-9a-f]{32}$/.test(r || '');
+let follow = '';
+if (!key) {
+  const r = location.hash.slice(1);
+  follow = isRoom(r) ? r : store.get('follow', '');
+  if (!isRoom(follow)) follow = '';
+  if (follow) { store.set('follow', follow); if (location.hash.slice(1) !== follow) history.replaceState(null, '', '#' + follow); }
+}
+addEventListener('hashchange', () => location.reload());
 const say = (text, button) => {
   if ($('msg').dataset.t === text) return;
   $('msg').dataset.t = text;
@@ -167,10 +196,17 @@ function apply(next) {
   onChange.forEach(f => f(was));
 }
 let saving = 0;
+// Changes made on a receiving device wait here until the other side confirms them.
+let pending = {};
+try { pending = JSON.parse(store.get('pending', '{}')) || {}; } catch {}
+let syncedAt = 0;
+const flush = () => { if (follow && link && link.ctl && link.ctl.readyState === 'open') link.ctl.send(JSON.stringify({ patch: pending })); };
+const clean = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([k, v]) => k.length < 300 && (v === null || typeof v === 'boolean' || typeof v === 'number')));
 function set(k, v) {
   const next = { ...state };
   if (v === null) delete next[k]; else next[k] = v;
   apply(next);
+  if (follow) { pending[k] = v; store.set('pending', JSON.stringify(pending)); flush(); return; }
   if (!key) return;
   saving++;
   fetch('state?k=' + encodeURIComponent(key), { method: 'POST', body: JSON.stringify({ [k]: v }) }).catch(() => {}).finally(() => saving--);
@@ -182,6 +218,7 @@ async function pull() {
     const r = await fetch('state?k=' + encodeURIComponent(key), { cache: 'no-store' });
     if (!r.ok) return;
     const next = await r.json();
+    syncedAt = Date.now();
     if (!saving && flat(next) !== flat(state)) apply(next);
   } catch {}
 }
@@ -239,13 +276,21 @@ const SIZE = 8 + 3 * 1024;
 let frames = [], offset = Infinity, lastFrame = 0, lastSound = performance.now(), connected = false;
 let shown = { timeByteArray: new Uint8Array(1024).fill(128), timeByteArrayL: new Uint8Array(1024).fill(128), timeByteArrayR: new Uint8Array(1024).fill(128) };
 
+let bytes = 0, count = 0, level = 0;
+const peers = new Map(); // devices this page sends to
+let link = null; // the connection this page receives from
 function accept(buf) {
   const now = performance.now();
   const sent = new DataView(buf.buffer, buf.byteOffset, 8).getFloat64(0, true);
   offset = Math.min(offset, now - sent);
   lastFrame = now;
+  bytes += buf.length; count++;
   const wave = buf.slice(8);
-  if (wave.some(v => v < 126 || v > 130)) lastSound = now;
+  let top = 0;
+  for (let i = 0; i < 1024; i++) top = Math.max(top, Math.abs(wave[i] - 128));
+  if (top > 2) lastSound = now;
+  level = Math.max(top, level * 0.9);
+  for (const p of peers.values()) if (p.data.readyState === 'open' && p.data.bufferedAmount < 65536) p.data.send(buf);
   frames.push({ at: sent, wave });
   if (frames.length > 120) frames.shift();
 }
@@ -279,7 +324,7 @@ async function stream() {
 if (key) stream();
 
 // --- Drawing
-let lastDraw = performance.now(), local = null;
+let lastDraw = performance.now();
 function draw(now) {
   requestAnimationFrame(draw);
   // Show the newest frame that is at least the chosen delay old, so visuals match a delayed headset.
@@ -291,7 +336,6 @@ function draw(now) {
     shown = { timeByteArray: w.subarray(0, 1024), timeByteArrayL: w.subarray(1024, 2048), timeByteArrayR: w.subarray(2048) };
     frames.splice(0, hit);
   }
-  if (local) local();
   viz.render({ audioLevels: shown, elapsedTime: Math.min((now - lastDraw) / 1000, 0.25) });
   lastDraw = now;
   if (get('auto') && performance.now() - lastChange > get('every') * 1000) next(get('blendAuto'));
@@ -300,6 +344,24 @@ function draw(now) {
 requestAnimationFrame(draw);
 
 // --- This computer's own sound, through the browser's share dialog (Chrome or Edge on a PC, Chrome on a Mac)
+// An audio worklet keeps sending at full rate when this tab is in the background.
+const worklet = `registerProcessor('frames', class extends AudioWorkletProcessor {
+  constructor() { super(); this.l = new Float32Array(1024); this.r = new Float32Array(1024); this.p = 0; this.n = 0; }
+  process([input]) {
+    const a = input[0], b = input[1] || a, len = a ? a.length : 128;
+    for (let i = 0; i < len; i++) { this.l[this.p] = a ? a[i] : 0; this.r[this.p] = b ? b[i] : 0; this.p = (this.p + 1) % 1024; }
+    this.n += len;
+    if (this.n >= 768) {
+      this.n = 0;
+      const out = new ArrayBuffer(3080), u = new Uint8Array(out, 8), v = x => Math.max(0, Math.min(255, 128 + x * 128));
+      new DataView(out).setFloat64(0, currentTime * 1000, true);
+      for (let i = 0; i < 1024; i++) { const l = this.l[(this.p + i) % 1024], r = this.r[(this.p + i) % 1024]; u[i] = v((l + r) / 2); u[1024 + i] = v(l); u[2048 + i] = v(r); }
+      this.port.postMessage(out, [out]);
+    }
+    return true;
+  }
+});`;
+let sharing = false;
 const share = document.createElement('button');
 share.textContent = "Share this computer's sound";
 share.onclick = async () => {
@@ -315,19 +377,15 @@ share.onclick = async () => {
       return;
     }
     const ctx = new AudioContext();
-    const src = ctx.createMediaStreamSource(new MediaStream([track]));
-    const split = ctx.createChannelSplitter(2);
-    const tap = () => Object.assign(ctx.createAnalyser(), { fftSize: 1024 });
-    const all = tap(), l = tap(), r = tap();
-    src.connect(all); src.connect(split); split.connect(l, 0); split.connect(r, 1);
-    const own = { timeByteArray: new Uint8Array(1024), timeByteArrayL: new Uint8Array(1024), timeByteArrayR: new Uint8Array(1024) };
-    local = () => {
-      all.getByteTimeDomainData(own.timeByteArray);
-      l.getByteTimeDomainData(own.timeByteArrayL);
-      r.getByteTimeDomainData(own.timeByteArrayR);
-      shown = own;
-    };
-    media.getTracks().forEach(t => t.addEventListener('ended', () => { local = null; ctx.close().catch(() => {}); media.getTracks().forEach(x => x.stop()); }));
+    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], { type: 'text/javascript' })));
+    const node = new AudioWorkletNode(ctx, 'frames', { numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit' });
+    node.port.onmessage = e => accept(new Uint8Array(e.data));
+    ctx.createMediaStreamSource(new MediaStream([track])).connect(node);
+    ctx.resume();
+    frames = []; offset = Infinity; lastSound = performance.now();
+    sharing = true;
+    media.getTracks().forEach(t => t.addEventListener('ended', () => { sharing = false; ctx.close().catch(() => {}); media.getTracks().forEach(x => x.stop()); }));
+    startSending();
   } catch (e) {
     say('Sharing did not start. Try again and allow it.', share);
   }
@@ -335,13 +393,179 @@ share.onclick = async () => {
 
 const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 setInterval(() => {
-  if (local) say('');
+  if (follow) {
+    if (!receiving()) say(signalUp ? 'Waiting for your computer. Open Spicewave there.' : 'Connecting…');
+    else if (performance.now() - lastSound > 6000) say('Connected, but your computer is silent. Play something there.');
+    else say('');
+  } else if (sharing) say('');
   else if (!key && canShare) { if ($('msg').hidden) say('To react to music, choose the entire screen and turn on system audio.', share); }
-  else if (!key) say('This device cannot hear its own music. Scan the code shown by the Mac app.');
+  else if (!key) say('This device cannot hear its own music. Open bps.basilev.com on a computer and scan its code here.');
   else if (!connected) say('Connecting to the Mac…');
   else if (performance.now() - lastSound > 6000) say('No sound from the Mac. Play something there. If it is already playing, allow Spicewave in System Settings → Privacy & Security → Screen & System Audio Recording.');
   else say('');
 }, 1000);
+
+// --- Pairing over the internet. The site only introduces the two devices; sound goes straight between them, encrypted.
+const ICE = { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] };
+let signalUp = false;
+const receiving = () => !!link && performance.now() - lastFrame < 2000;
+function signal(room, role, onMessage, onOpen) {
+  let ws, ping;
+  const connect = () => {
+    ws = new WebSocket(SITE.replace('http', 'ws') + '/signal/' + room + '/' + role);
+    ws.onopen = () => { signalUp = true; onOpen(); ping = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 30000); };
+    ws.onmessage = e => { if (e.data !== 'pong') { let m; try { m = JSON.parse(e.data); } catch { return; } onMessage(m); } };
+    ws.onclose = () => { signalUp = false; clearInterval(ping); setTimeout(connect, 3000); };
+  };
+  connect();
+  return m => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
+}
+// Messages of one connection are handled in order.
+const inOrder = () => { let last = Promise.resolve(); return f => { last = last.then(f).catch(e => console.warn(e)); }; };
+
+let sendRoom = '', lanHost = '';
+const share1 = p => { if (p.ctl.readyState === 'open') p.ctl.send(JSON.stringify({ state })); };
+async function startSending() {
+  if (sendRoom) return;
+  if (onMac) {
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('spicewave room ' + key)));
+    sendRoom = [...h.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join('');
+    try { lanHost = new URL((await (await fetch('info?k=' + encodeURIComponent(key))).json())[0]).hostname; } catch {}
+  } else {
+    sendRoom = store.get('room', '');
+    if (!isRoom(sendRoom)) {
+      sendRoom = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+      store.set('room', sendRoom);
+    }
+  }
+  const post = signal(sendRoom, 'send', m => {
+    if (m.t === 'hello') offer(m.from);
+    const p = peers.get(m.from);
+    if (!p || m.n !== p.n) return;
+    if (m.t === 'answer') p.run(() => p.pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }));
+    if (m.t === 'ice') p.run(() => p.pc.addIceCandidate(m.c));
+  }, () => post({ t: 'here' }));
+  function drop(id, p) { p.pc.close(); if (peers.get(id) === p) peers.delete(id); }
+  function offer(id) {
+    if (peers.has(id)) drop(id, peers.get(id));
+    if (peers.size >= 8) return;
+    const pc = new RTCPeerConnection(ICE);
+    const p = { pc, n: Math.random(), run: inOrder(), since: Date.now(), data: pc.createDataChannel('sound', { ordered: false, maxRetransmits: 0 }), ctl: pc.createDataChannel('state') };
+    peers.set(id, p);
+    pc.onicecandidate = e => {
+      if (!e.candidate) return;
+      const c = e.candidate.toJSON();
+      post({ t: 'ice', to: id, n: p.n, c });
+      // Browsers hide the local address behind a .local name some networks cannot look up; the Mac app knows it.
+      if (lanHost && /[0-9a-f-]{36}\.local/.test(c.candidate)) post({ t: 'ice', to: id, n: p.n, c: { ...c, candidate: c.candidate.replace(/[0-9a-f-]{36}\.local/, lanHost) } });
+    };
+    pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState)) drop(id, p); };
+    p.data.onclose = () => drop(id, p);
+    setTimeout(() => { if (pc.connectionState !== 'connected') drop(id, p); }, 30000);
+    p.ctl.onopen = () => share1(p);
+    p.ctl.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      for (const [k, v] of Object.entries(clean(m.patch))) set(k, v);
+      share1(p);
+    };
+    p.run(async () => { await pc.setLocalDescription(await pc.createOffer()); post({ t: 'offer', to: id, n: p.n, sdp: pc.localDescription.sdp }); });
+  }
+  onChange.push(() => peers.forEach(share1));
+  showPair();
+}
+
+function startReceiving() {
+  const post = signal(follow, 'receive', m => {
+    if (m.t === 'here' && !receiving()) hello();
+    if (m.t === 'offer' && !link) answer(m);
+    if (m.t === 'ice' && link && link.n === m.n) link.run(() => link && link.pc.addIceCandidate(m.c));
+  }, () => { if (!receiving()) hello(); });
+  let asked = 0;
+  function hello() { close(); asked = performance.now(); post({ t: 'hello' }); }
+  function close() { if (link) { const l = link; link = null; l.pc.close(); } }
+  function answer(m) {
+    const pc = new RTCPeerConnection(ICE);
+    const l = link = { pc, n: m.n, run: inOrder(), ctl: null };
+    pc.onicecandidate = e => { if (e.candidate) post({ t: 'ice', to: m.from, n: m.n, c: e.candidate.toJSON() }); };
+    pc.ondatachannel = e => {
+      const ch = e.channel;
+      if (ch.label === 'sound') {
+        ch.binaryType = 'arraybuffer';
+        frames = []; offset = Infinity; lastSound = performance.now();
+        ch.onmessage = x => { if (link === l && x.data.byteLength === SIZE) accept(new Uint8Array(x.data)); };
+      } else {
+        l.ctl = ch;
+        ch.onopen = flush;
+        if (ch.readyState === 'open') flush();
+        ch.onmessage = x => {
+          let s; try { s = clean(JSON.parse(x.data).state); } catch { return; }
+          for (const k of Object.keys(pending)) if ((s[k] ?? null) === pending[k]) delete pending[k];
+          store.set('pending', JSON.stringify(pending));
+          const next = { ...s };
+          for (const [k, v] of Object.entries(pending)) if (v === null) delete next[k]; else next[k] = v;
+          syncedAt = Date.now();
+          if (flat(next) !== flat(state)) apply(next);
+        };
+      }
+    };
+    l.run(async () => {
+      await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      post({ t: 'answer', to: m.from, n: m.n, sdp: pc.localDescription.sdp });
+    });
+  }
+  // No sound for a while, in any state: ask again.
+  setInterval(() => { if (!receiving() && performance.now() - asked > 12000) hello(); }, 2000);
+}
+$('unpair').onclick = () => { store.set('follow', ''); follow = ''; history.replaceState(null, '', location.pathname); location.reload(); };
+
+function showPair() {
+  const url = SITE + '/#' + sendRoom;
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  $('pair').querySelector('img').src = qr.createDataURL(6, 12);
+  $('pair').hidden = false;
+}
+
+// --- Status in Settings: what is connected, how fast, and what is shared.
+let was = { bytes: 0, count: 0, at: performance.now() };
+setInterval(() => {
+  const now = performance.now(), secs = (now - was.at) / 1000;
+  const kbps = Math.round((bytes - was.bytes) * 8 / 1000 / secs), fps = Math.round((count - was.count) / secs);
+  was = { bytes, count, at: now };
+  if ($('panel').hidden) return;
+  const live = fps > 0;
+  const devices = [...peers.values()].filter(p => p.data.readyState === 'open').length;
+  const tail = devices ? ', sending to ' + devices + (devices > 1 ? ' devices' : ' device') : '';
+  const text = follow ? (receiving() ? 'Direct from your computer' : signalUp ? 'Waiting for your computer' : 'Offline')
+    : onMac ? (connected ? 'Mac sound' + tail : 'Mac app not answering') : key ? (connected ? 'Mac over Wi-Fi' : 'Mac not answering')
+    : sharing ? "This computer's sound" + tail : 'No sound source';
+  $('st-link').textContent = text;
+  $('st-link').className = live ? 'ok' : 'bad';
+  $('st-data').textContent = live ? kbps.toLocaleString() + ' kbps, ' + fps + ' frames/s' : 'None';
+  const shared = follow || key, waiting = Object.keys(pending), n = favs().length;
+  const ago = syncedAt ? Math.round((Date.now() - syncedAt) / 1000) : -1;
+  const when = !shared ? 'this device only' : ago < 0 ? 'not synced yet' : live || ago < 15 ? 'synced' : 'synced ' + (ago < 90 ? ago + ' s' : Math.round(ago / 60) + ' min') + ' ago';
+  const wait = (list, f) => list.length ? list.length + ' waiting' : f;
+  const favWait = waiting.filter(k => k.startsWith('fav:'));
+  $('st-fav').textContent = n + ', ' + wait(favWait, when);
+  const sw = wait(waiting.filter(k => !k.startsWith('fav:')), when);
+  $('st-set').textContent = sw[0].toUpperCase() + sw.slice(1);
+}, 1000);
+setInterval(() => {
+  if ($('panel').hidden) return;
+  level *= performance.now() - lastFrame > 500 ? 0 : 1;
+  $('meter').firstChild.style.transform = 'scaleX(' + Math.min(1, level / 100) + ')';
+}, 100);
+
+// Keeps an iPad or phone awake while this page is showing (only possible on the secure site).
+async function stayAwake() {
+  if (document.hidden || !navigator.wakeLock || !navigator.maxTouchPoints) return;
+  try { await navigator.wakeLock.request('screen'); } catch {}
+}
+document.addEventListener('visibilitychange', stayAwake);
+addEventListener('pointerdown', stayAwake);
 
 // --- Pomodoro: one phase at a time, kept as an end time so it survives reloads and sleep.
 const minutes = phase => get(phase);
@@ -521,16 +745,17 @@ addEventListener('keydown', e => {
 
 // --- Introduction. "Never show again" is remembered per kind of device, on the Mac as well, since the address
 // (and so this browser's storage) changes with the network.
-const here = !key ? 'alone' : location.hostname === 'localhost' ? 'mac' : 'remote';
+const here = follow ? 'paired' : !key ? 'alone' : onMac ? 'mac' : 'remote';
 function intro() {
   const box = (t, on) => { const d = document.createElement('div'); d.textContent = t; if (on) d.className = 'here'; return d; };
   const arrow = () => { const a = document.createElement('span'); a.textContent = '→'; return a; };
-  const parts = { remote: ['Music on the Mac', 'Wi-Fi', 'This screen'], mac: ['Music on this Mac', 'This screen', 'iPad'], alone: ['Music on this computer', 'This screen'] }[here];
+  const parts = { remote: ['Music on the Mac', 'Wi-Fi', 'This screen'], mac: ['Music on this Mac', 'This screen', 'iPad'], alone: ['Music on this computer', 'This screen'], paired: ['Music on your computer', 'Direct link', 'This screen'] }[here];
   $('flow').replaceChildren(...parts.flatMap((t, i) => [...(i ? [arrow()] : []), box(t, t === 'This screen')]));
   $('how').textContent = {
     remote: 'The Mac plays the music and sends its sound to this screen over your Wi-Fi, where it becomes the visuals. In Spotify here, choose the Mac as the speaker. Nothing is recorded.',
     mac: 'Play anything on this Mac and the visuals follow it. To see them on an iPad too, scan the code at top left. Nothing is recorded.',
-    alone: canShare ? "Press “Share this computer's sound” and the visuals follow whatever is playing. Nothing is recorded or sent anywhere." : 'This device cannot hear its own music. Open Spicewave on a Mac and scan its code here to make the visuals follow the music.',
+    paired: 'Your computer plays the music and sends its sound straight to this screen, where it becomes the visuals. In Spotify here, choose that computer as the speaker. Nothing is recorded.',
+    alone: canShare ? "Press “Share this computer's sound” and the visuals follow whatever is playing. A code then appears: scan it with an iPad to show them there too. Nothing is recorded." : 'This device cannot hear its own music. Open bps.basilev.com on a computer, share its sound, and scan the code here.',
   }[here];
   $('never').checked = false;
   panel('');
@@ -548,17 +773,16 @@ Promise.race([pull(), new Promise(r => setTimeout(r, 1500))]).then(() => {
   if (get('introOff:' + here)) { entered = true; tick(); } else intro();
 });
 
-// --- Pairing code, on the Mac only
-if (location.hostname === 'localhost' && key) {
+if (follow) { $('unpair').hidden = false; startReceiving(); }
+if (onMac) {
+  startSending();
+  // The address on the local network also works, without the internet.
   fetch('info?k=' + encodeURIComponent(key)).then(r => r.json()).then(urls => {
-    if (!urls.length) return;
-    $('pair').querySelector('img').src = 'qr.png?k=' + encodeURIComponent(key);
-    for (const u of urls) {
+    for (const u of urls.slice(0, 1)) {
       const a = document.createElement('a');
-      a.href = u; a.textContent = u;
+      a.href = u; a.textContent = 'Without internet: ' + u;
       $('pair').append(a);
     }
-    $('pair').hidden = false;
   }).catch(() => {});
 }
 </script>

@@ -1,0 +1,11 @@
+{
+  "name": "spicewave",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --port 8788 --local-upstream localhost:8788",
+    "deploy": "op run --env-file=.env.op -- wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.141.0"
+  }
+}

@@ -1,8 +1,6 @@
 import AppKit
 import AudioToolbox
 import CoreAudio
-import CoreImage
-import CoreImage.CIFilterBuiltins
 import Network
 import Security
 import SystemConfiguration
@@ -145,13 +143,6 @@ func wifiAddress() -> String? {
     return nil
 }
 
-func qrPNG(_ text: String) -> Data? {
-    let f = CIFilter.qrCodeGenerator()
-    f.message = Data(text.utf8)
-    guard let img = f.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)) else { return nil }
-    return NSBitmapImageRep(ciImage: img).representation(using: .png, properties: [:])
-}
-
 final class Server {
     private final class Client {
         let conn: NWConnection
@@ -265,11 +256,8 @@ final class Server {
             let name = (SCDynamicStoreCopyLocalHostName(nil) as String?).map { "\($0).local" }
             let urls = [wifiAddress(), name].compactMap { $0 }.map { "http://\($0):\(port)/?k=\(key)" }
             send(c, 200, try? JSONEncoder().encode(urls), "application/json")
-        case "/qr.png":
-            guard allowed, let ip = wifiAddress() else { return send(c, 403) }
-            send(c, 200, qrPNG("http://\(ip):\(port)/?k=\(key)"), "image/png")
         default:
-            let files = ["/": "index.html", "/butterchurn.min.js": "", "/butterchurnPresets.min.js": "", "/butterchurnPresetsExtra.min.js": ""]
+            let files = ["/": "index.html", "/qrcode.js": "", "/butterchurn.min.js": "", "/butterchurnPresets.min.js": "", "/butterchurnPresetsExtra.min.js": ""]
             guard let f = files[url.path] else { return send(c, 404) }
             let name = f.isEmpty ? String(url.path.dropFirst()) : f
             let data = try? Data(contentsOf: Bundle.main.resourceURL!.appendingPathComponent("web/\(name)"))
@@ -301,7 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical], reason: "Streaming sound levels")
         do {
             server = try Server(audio: SystemAudio())
-            openPage()
+            if !CommandLine.arguments.contains("--quiet") { openPage() }
         } catch {
             NSAlert(error: error).runModal()
             NSApp.terminate(nil)
