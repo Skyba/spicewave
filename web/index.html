@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Butterchurn">
-<title>Butterchurn</title>
+<meta name="apple-mobile-web-app-title" content="Spicewave">
+<title>Spicewave</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #fff;
     font: 15px/1.4 -apple-system, system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
@@ -339,7 +339,7 @@ setInterval(() => {
   else if (!key && canShare) { if ($('msg').hidden) say('To react to music, choose the entire screen and turn on system audio.', share); }
   else if (!key) say('This device cannot hear its own music. Scan the code shown by the Mac app.');
   else if (!connected) say('Connecting to the Mac…');
-  else if (performance.now() - lastSound > 6000) say('No sound from the Mac. Play something there. If it is already playing, allow Butterchurn in System Settings → Privacy & Security → Screen & System Audio Recording.');
+  else if (performance.now() - lastSound > 6000) say('No sound from the Mac. Play something there. If it is already playing, allow Spicewave in System Settings → Privacy & Security → Screen & System Audio Recording.');
   else say('');
 }, 1000);
 
@@ -530,7 +530,7 @@ function intro() {
   $('how').textContent = {
     remote: 'The Mac plays the music and sends its sound to this screen over your Wi-Fi, where it becomes the visuals. In Spotify here, choose the Mac as the speaker. Nothing is recorded.',
     mac: 'Play anything on this Mac and the visuals follow it. To see them on an iPad too, scan the code at top left. Nothing is recorded.',
-    alone: canShare ? "Press “Share this computer's sound” and the visuals follow whatever is playing. Nothing is recorded or sent anywhere." : 'This device cannot hear its own music. Open Butterchurn on a Mac and scan its code here to make the visuals follow the music.',
+    alone: canShare ? "Press “Share this computer's sound” and the visuals follow whatever is playing. Nothing is recorded or sent anywhere." : 'This device cannot hear its own music. Open Spicewave on a Mac and scan its code here to make the visuals follow the music.',
   }[here];
   $('never').checked = false;
   panel('');

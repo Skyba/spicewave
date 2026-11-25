@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key><string>com.basilev.butterchurn</string>
-	<key>CFBundleName</key><string>Butterchurn</string>
-	<key>CFBundleExecutable</key><string>Butterchurn</string>
+	<key>CFBundleName</key><string>Spicewave</string>
+	<key>CFBundleExecutable</key><string>Spicewave</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>1.0</string>
 	<key>LSMinimumSystemVersion</key><string>14.4</string>
 	<key>NSHighResolutionCapable</key><true/>
-	<key>NSAudioCaptureUsageDescription</key><string>Butterchurn draws the sound this Mac is playing.</string>
+	<key>NSAudioCaptureUsageDescription</key><string>Spicewave draws the sound this Mac is playing.</string>
 </dict>
 </plist>

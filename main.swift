@@ -22,7 +22,7 @@ let key: String = {
 }()
 
 func check(_ s: OSStatus, _ what: String) -> Bool {
-    if s != noErr { NSLog("Butterchurn: %@ failed (%d)", what, s) }
+    if s != noErr { NSLog("Spicewave: %@ failed (%d)", what, s) }
     return s == noErr
 }
 
@@ -60,7 +60,7 @@ final class SystemAudio {
         guard check(AudioHardwareCreateProcessTap(desc, &tap), "create tap") else { return }
         // Tap only, no hardware device inside: a Bluetooth headset would otherwise switch to call mode.
         let config: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Butterchurn",
+            kAudioAggregateDeviceNameKey: "Spicewave",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceTapAutoStartKey: false,
@@ -181,7 +181,7 @@ final class Server {
             guard case .failed(let error) = state else { return }
             DispatchQueue.main.async {
                 let a = NSAlert()
-                a.messageText = "Butterchurn could not open port \(port)"
+                a.messageText = "Spicewave could not open port \(port)"
                 a.informativeText = error.localizedDescription
                 a.runModal()
                 NSApp.terminate(nil)
@@ -294,7 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu(), item = NSMenuItem()
         item.submenu = NSMenu()
         item.submenu!.addItem(withTitle: "Open in browser", action: #selector(openPage), keyEquivalent: "o")
-        item.submenu!.addItem(withTitle: "Quit Butterchurn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        item.submenu!.addItem(withTitle: "Quit Spicewave", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(item)
         NSApp.mainMenu = menu
 
