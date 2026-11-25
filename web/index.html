@@ -28,7 +28,28 @@
   #msg button { margin-top: 8px; pointer-events: auto; }
   #ring { position: fixed; right: calc(18px + env(safe-area-inset-right)); touch-action: none; -webkit-touch-callout: none; top: calc(18px + env(safe-area-inset-top)); width: 76px; height: 76px; padding: 0;
     border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; --c: #ff7a59; }
-  #ring.rest { --c: #5ed39a; }
+  #ring.rest { background: #1dff7a; color: #022a12; --c: #022a12; box-shadow: 0 0 26px rgba(29,255,122,.75); }
+  #ring.rest circle { stroke: rgba(2,42,18,.22); }
+  #ring.rest circle + circle { stroke: var(--c); }
+  #big.rest { color: #1dff7a; }
+  .meadow #big.rest { color: #f6f0d8; text-shadow: 0 0 .06em #0f2a1f, 0 0 .4em #0f2a1f; }
+  #ring { transition: transform 1.5s; }
+  .meadow #ring { transform: translate(-28px, 28px); }
+  .meadow #ring.rest { background: rgba(15,42,31,.92); color: #f1ecd2; --c: #b9d68a; box-shadow: none; }
+  .meadow #ring.rest circle { stroke: rgba(241,236,210,.18); }
+  .meadow #ring.rest circle + circle { stroke: var(--c); }
+  /* The break picture: a dark green frame, a fine line, then the meadow. */
+  #rest { --f: clamp(16px, 3.4vmin, 44px); position: fixed; inset: 0; box-sizing: border-box; padding: var(--f); pointer-events: none;
+    padding: max(var(--f), env(safe-area-inset-top)) max(var(--f), env(safe-area-inset-right)) max(var(--f), env(safe-area-inset-bottom)) max(var(--f), env(safe-area-inset-left));
+    background: radial-gradient(ellipse at 50% 40%, #1b4030, #0c2219 75%); opacity: 0; visibility: hidden; transition: opacity 2s, visibility 0s 2s; }
+  .meadow #rest { opacity: 1; visibility: visible; transition: opacity 2s; }
+  #rest div { position: relative; height: 100%; overflow: hidden; border-radius: 6px; outline: 1px solid rgba(185,214,138,.45); outline-offset: calc(var(--f) * -.28 + 8px); box-shadow: 0 0 0 1px #081811, 0 10px 40px rgba(0,0,0,.55); }
+  #rest div::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 70px rgba(8,28,20,.65); }
+  #rest img { width: 100%; height: 100%; object-fit: cover; display: block; animation: drift 80s ease-in-out infinite alternate; animation-play-state: paused; }
+  .meadow #rest img { animation-play-state: running; }
+  @keyframes drift { to { transform: scale(1.07) translateX(-1.2%); } }
+  @media (orientation: portrait) { #rest img { object-position: 78% 50%; } }
+  @media (prefers-reduced-motion: reduce) { #rest img { animation: none; } }
   #ring.paused { opacity: .55; }
   #ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
   #ring circle { fill: none; stroke-width: 5; stroke: rgba(255,255,255,.2); }
@@ -90,6 +111,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="rest" aria-hidden="true"><div><img alt=""></div></div>
 <div id="msg" hidden></div>
 <div id="pair" hidden><img alt="QR code for the iPad"><div>Scan with the iPad</div></div>
 <div id="bar">
@@ -122,12 +144,13 @@
   <label>Show the timer <input type="checkbox" data-k="pom"></label>
   <label class="slide">Focus <output></output><input type="range" data-k="work" data-u="min" min="1" max="90" step="1"></label>
   <label class="slide">Break <output></output><input type="range" data-k="rest" data-u="min" min="1" max="30" step="1"></label>
+  <label>Meadow picture during breaks <input type="checkbox" data-k="meadow"></label>
   <div class="row"><button id="pause">Pause</button><button id="skip">Skip</button><button id="restart">Restart</button></div>
   </section>
   <section>
   <h2>Status</h2>
   <dl id="status"><dt>Connection</dt><dd id="st-link"></dd><dt>Data</dt><dd id="st-data"></dd><dt>Sound</dt><dd><span id="meter"><i></i></span></dd>
-  <dt>Favorites</dt><dd id="st-fav"></dd><dt>Settings</dt><dd id="st-set"></dd><dt>Pomodoro</dt><dd>This device only</dd></dl>
+  <dt>Favorites</dt><dd id="st-fav"></dd><dt>Settings</dt><dd id="st-set"></dd><dt>Pomodoro</dt><dd id="st-pom"></dd></dl>
   <div class="row"><button id="unpair" hidden>Disconnect this device</button></div>
   <h2>Display</h2>
   <label class="slide">Delay to match the headset <output></output><input type="range" data-k="sync" data-u="ms" min="0" max="1000" step="25"></label>
@@ -181,7 +204,7 @@ const say = (text, button) => {
 
 // --- Settings. Kept in this browser, and on the Mac when the page comes from the app, so devices share them.
 // Favorites are separate "fav:<name>" keys so two devices never overwrite each other's list.
-const defaults = { auto: true, every: 25, favOnly: false, blendAuto: 4, blendTap: 2, pom: true, work: 25, rest: 5, sync: 150, sharp: 1.5 };
+const defaults = { auto: true, every: 25, favOnly: false, blendAuto: 4, blendTap: 2, pom: true, work: 25, rest: 5, meadow: true, sync: 150, sharp: 1.5 };
 let state = {};
 try { state = JSON.parse(store.get('state', '{}')) || {}; } catch {}
 const get = k => state[k] ?? defaults[k];
@@ -199,27 +222,34 @@ let saving = 0;
 // Changes made on a receiving device wait here until the other side confirms them.
 let pending = {};
 try { pending = JSON.parse(store.get('pending', '{}')) || {}; } catch {}
-let syncedAt = 0;
+let syncedAt = 0, alone = null;
+const isPom = k => k.startsWith('pom.');
 const flush = () => { if (follow && link && link.ctl && link.ctl.readyState === 'open') link.ctl.send(JSON.stringify({ patch: pending })); };
 const clean = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([k, v]) => k.length < 300 && (v === null || typeof v === 'boolean' || typeof v === 'number')));
-function set(k, v) {
+let changes = 0;
+function setMany(patch) {
+  changes++;
   const next = { ...state };
-  if (v === null) delete next[k]; else next[k] = v;
+  for (const [k, v] of Object.entries(patch)) if (v === null) delete next[k]; else next[k] = v;
   apply(next);
-  if (follow) { pending[k] = v; store.set('pending', JSON.stringify(pending)); flush(); return; }
+  if (follow) { Object.assign(pending, patch); store.set('pending', JSON.stringify(pending)); flush(); return; }
   if (!key) return;
   saving++;
-  fetch('state?k=' + encodeURIComponent(key), { method: 'POST', body: JSON.stringify({ [k]: v }) }).catch(() => {}).finally(() => saving--);
+  fetch('state?k=' + encodeURIComponent(key), { method: 'POST', body: JSON.stringify(patch) }).catch(() => {}).finally(() => saving--);
 }
+const set = (k, v) => setMany({ [k]: v });
 const flat = o => JSON.stringify(Object.entries(o).sort());
 async function pull() {
   if (!key || saving) return;
+  const before = changes;
   try {
     const r = await fetch('state?k=' + encodeURIComponent(key), { cache: 'no-store' });
     if (!r.ok) return;
     const next = await r.json();
+    if (saving || changes !== before) return;
     syncedAt = Date.now();
-    if (!saving && flat(next) !== flat(state)) apply(next);
+    alone = null;
+    if (flat(next) !== flat(state)) apply(next);
   } catch {}
 }
 
@@ -324,9 +354,10 @@ async function stream() {
 if (key) stream();
 
 // --- Drawing
-let lastDraw = performance.now();
+let lastDraw = performance.now(), resting = false, restSince = 0; // resting: the meadow covers the visuals
 function draw(now) {
   requestAnimationFrame(draw);
+  if (resting && performance.now() - restSince > 2500) { lastDraw = now; return; }
   // Show the newest frame that is at least the chosen delay old, so visuals match a delayed headset.
   const target = performance.now() - offset - get('sync');
   let hit = -1;
@@ -338,7 +369,7 @@ function draw(now) {
   }
   viz.render({ audioLevels: shown, elapsedTime: Math.min((now - lastDraw) / 1000, 0.25) });
   lastDraw = now;
-  if (get('auto') && performance.now() - lastChange > get('every') * 1000) next(get('blendAuto'));
+  if (get('auto') && !resting && performance.now() - lastChange > get('every') * 1000) next(get('blendAuto'));
 
 }
 requestAnimationFrame(draw);
@@ -465,7 +496,10 @@ async function startSending() {
     p.ctl.onopen = () => share1(p);
     p.ctl.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      for (const [k, v] of Object.entries(clean(m.patch))) set(k, v);
+      const patch = clean(m.patch);
+      // The latest pomodoro action wins, also when it was made while the device was disconnected.
+      if ((patch['pom.at'] ?? Infinity) < (state['pom.at'] || 0)) for (const k of Object.keys(patch)) if (isPom(k)) delete patch[k];
+      if (Object.keys(patch).length) setMany(patch);
       share1(p);
     };
     p.run(async () => { await pc.setLocalDescription(await pc.createOffer()); post({ t: 'offer', to: id, n: p.n, sdp: pc.localDescription.sdp }); });
@@ -499,11 +533,14 @@ function startReceiving() {
         if (ch.readyState === 'open') flush();
         ch.onmessage = x => {
           let s; try { s = clean(JSON.parse(x.data).state); } catch { return; }
+          if ((s['pom.at'] || 0) > (pending['pom.at'] ?? Infinity)) for (const k of Object.keys(pending)) if (isPom(k)) delete pending[k];
           for (const k of Object.keys(pending)) if ((s[k] ?? null) === pending[k]) delete pending[k];
           store.set('pending', JSON.stringify(pending));
           const next = { ...s };
           for (const [k, v] of Object.entries(pending)) if (v === null) delete next[k]; else next[k] = v;
           syncedAt = Date.now();
+          l.synced = true;
+          alone = null;
           if (flat(next) !== flat(state)) apply(next);
         };
       }
@@ -544,14 +581,15 @@ setInterval(() => {
   $('st-link').textContent = text;
   $('st-link').className = live ? 'ok' : 'bad';
   $('st-data').textContent = live ? kbps.toLocaleString() + ' kbps, ' + fps + ' frames/s' : 'None';
-  const shared = follow || key, waiting = Object.keys(pending), n = favs().length;
+  const waiting = Object.keys(pending), n = favs().length;
   const ago = syncedAt ? Math.round((Date.now() - syncedAt) / 1000) : -1;
   const when = !shared ? 'this device only' : ago < 0 ? 'not synced yet' : live || ago < 15 ? 'synced' : 'synced ' + (ago < 90 ? ago + ' s' : Math.round(ago / 60) + ' min') + ' ago';
   const wait = (list, f) => list.length ? list.length + ' waiting' : f;
   const favWait = waiting.filter(k => k.startsWith('fav:'));
   $('st-fav').textContent = n + ', ' + wait(favWait, when);
-  const sw = wait(waiting.filter(k => !k.startsWith('fav:')), when);
-  $('st-set').textContent = sw[0].toUpperCase() + sw.slice(1);
+  const up = t => t[0].toUpperCase() + t.slice(1);
+  $('st-set').textContent = up(wait(waiting.filter(k => !k.startsWith('fav:') && !isPom(k)), when));
+  $('st-pom').textContent = !get('pom') ? 'Off' : up(wait(waiting.filter(isPom).slice(0, 1), when));
 }, 1000);
 setInterval(() => {
   if ($('panel').hidden) return;
@@ -567,52 +605,65 @@ async function stayAwake() {
 document.addEventListener('visibilitychange', stayAwake);
 addEventListener('pointerdown', stayAwake);
 
-// --- Pomodoro: one phase at a time, kept as an end time so it survives reloads and sleep.
-const minutes = phase => get(phase);
-let pom = null, entered = false; // a first timer starts once the introduction is closed
-try { pom = JSON.parse(store.get('pom', 'null')); } catch {}
-const keep = () => store.set('pom', JSON.stringify(pom));
-const begin = phase => { pom = { phase, total: minutes(phase), ends: Date.now() + minutes(phase) * 60000 }; keep(); };
+// --- Pomodoro: the running phase is part of the shared state, as an end time, so every device shows the same one
+// and it survives reloads and sleep. A device that is out of touch carries on by itself (alone) until it syncs again.
+const shared = !!(follow || key);
+const inSync = () => !shared || (follow ? receiving() && !!link && !!link.synced : Date.now() - syncedAt < 12000);
+let entered = false; // a first timer starts once the introduction is closed
+function pomodoro() {
+  if (alone) return alone;
+  if (!(state['pom.total'] > 0) || !(state['pom.ends'] > 0)) return null;
+  return { phase: state['pom.rest'] ? 'rest' : 'work', total: state['pom.total'], ends: state['pom.ends'], left: state['pom.left'] || 0, at: state['pom.at'] || 0 };
+}
+const keys = p => ({ 'pom.rest': p.phase === 'rest', 'pom.total': p.total, 'pom.ends': p.ends, 'pom.left': p.left || 0, 'pom.at': p.at });
+const fresh = (phase, from, at) => ({ phase, total: get(phase), ends: from + get(phase) * 60000, left: 0, at });
+// What someone does is always shared; what happens by itself only while in touch.
+function act(p, extra) { alone = null; setMany({ ...keys({ ...p, at: Date.now() }), ...extra }); tick(); }
+function auto(p) { if (inSync()) { alone = null; setMany(keys(p)); } else alone = p; }
 const other = phase => phase === 'work' ? 'rest' : 'work';
-let bigTimer;
-function announce() {
+let bigTimer, lastPhase = '', wasResting = false;
+// Loaded ahead, so it is there when the first break starts.
+setTimeout(() => { $('rest').querySelector('img').src = 'meadow.jpg'; }, 4000);
+function announce(p) {
   const big = $('big');
   clearTimeout(bigTimer);
   big.hidden = true;
   void big.offsetWidth; // restarts the blinking
-  big.children[0].textContent = pom.phase === 'work' ? 'Focus' : 'Break';
-  big.children[1].textContent = pom.total + ' min';
+  big.className = p.phase;
+  big.children[0].textContent = p.phase === 'work' ? 'Focus' : 'Break';
+  big.children[1].textContent = p.total + ' min';
   big.hidden = false;
   bigTimer = setTimeout(() => { big.hidden = true; }, 5000);
 }
-function flip() { begin(other(pom.phase)); announce(); }
 function tick() {
-  $('ring').hidden = !get('pom');
-  if (!get('pom')) return;
-  if (!pom || !pom.ends) {
-    if (!entered) { $('ring').hidden = true; return; }
-    begin('work');
+  const on = get('pom');
+  let p = on ? pomodoro() : null;
+  if (on && !p && entered) { auto(fresh('work', Date.now(), 0)); p = pomodoro(); }
+  if (p && !p.left && Date.now() >= p.ends) {
+    // Long past its end (every device was off): start over instead of replaying missed rounds.
+    const over = Date.now() - p.ends > (get('work') + get('rest')) * 60000;
+    auto(over ? fresh('work', Date.now(), p.at) : fresh(other(p.phase), p.ends, p.at));
+    p = pomodoro();
   }
-  if (!pom.left) {
-    const late = Date.now() - pom.ends;
-    // Long past its end (device was off): start over instead of replaying missed rounds.
-    if (late > (get('work') + get('rest')) * 60000) begin('work');
-    else if (late >= 0) flip();
-  }
-  const left = pom.left ?? Math.max(0, pom.ends - Date.now());
+  resting = !!p && p.phase === 'rest' && get('meadow') && $('intro').hidden;
+  document.body.classList.toggle('meadow', resting);
+  if (resting !== wasResting) { wasResting = resting; restSince = performance.now(); if (!resting) lastChange = restSince; }
+  $('ring').hidden = !p;
+  if (!p) { lastPhase = ''; return; }
+  const left = p.left || Math.max(0, p.ends - Date.now());
+  // Blink whenever a phase has just begun, here or on another device.
+  if (lastPhase && lastPhase !== p.phase && p.total * 60000 - left < 5000) announce(p);
+  lastPhase = p.phase;
   const s = Math.ceil(left / 1000);
   $('left').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  $('arc').setAttribute('stroke-dasharray', Math.min(100, 100 * (1 - left / (pom.total * 60000))) + ' 100');
-  $('ring').className = (pom.phase === 'rest' ? 'rest' : '') + (pom.left ? ' paused' : '');
-  $('ring').setAttribute('aria-label', (pom.phase === 'work' ? 'Focus' : 'Break') + ', ' + (pom.left ? 'paused, tap to resume' : 'tap to pause'));
-  $('pause').textContent = pom.left ? 'Resume' : 'Pause';
+  $('arc').setAttribute('stroke-dasharray', Math.max(0, Math.min(100, 100 * (1 - left / (p.total * 60000)))) + ' 100');
+  $('ring').className = (p.phase === 'rest' ? 'rest' : '') + (p.left ? ' paused' : '');
+  $('ring').setAttribute('aria-label', (p.phase === 'work' ? 'Focus' : 'Break') + ', ' + (p.left ? 'paused, tap to resume' : 'tap to pause'));
+  $('pause').textContent = p.left ? 'Resume' : 'Pause';
 }
-function togglePause() {
-  if (pom.left) { pom.ends = Date.now() + pom.left; delete pom.left; }
-  else pom.left = Math.max(1, pom.ends - Date.now());
-  keep(); tick();
-}
-$('pause').onclick = () => { if (get('pom') && pom) togglePause(); };
+const withPom = f => () => { const p = get('pom') && pomodoro(); if (p) f(p); };
+const togglePause = withPom(p => act(p.left ? { ...p, ends: Date.now() + p.left, left: 0 } : { ...p, left: Math.max(1, p.ends - Date.now()) }));
+$('pause').onclick = togglePause;
 let hold = 0, held = false;
 const endHold = () => clearTimeout(hold);
 const openPom = () => { held = true; panel('pom'); };
@@ -620,8 +671,18 @@ $('ring').onpointerdown = e => { held = false; endHold(); if (e.button === 0) ho
 $('ring').onpointerup = $('ring').onpointerleave = $('ring').onpointercancel = endHold;
 $('ring').oncontextmenu = e => { e.preventDefault(); endHold(); openPom(); };
 $('ring').onclick = () => { if (!held) togglePause(); held = false; };
-$('skip').onclick = () => { if (get('pom') && pom) { flip(); tick(); } };
-$('restart').onclick = () => { if (get('pom')) { begin('work'); tick(); } };
+$('skip').onclick = withPom(p => act(fresh(other(p.phase), Date.now())));
+$('restart').onclick = withPom(() => act(fresh('work', Date.now())));
+// Settings that touch the running timer travel together with it.
+function change(k, v) {
+  const p = pomodoro();
+  if (k === 'pom' && v) act(fresh('work', Date.now()), { pom: true });
+  else if (p && get('pom') && k === p.phase && v !== p.total) {
+    // A new length changes the running phase, keeping the time already done.
+    const diff = (v - p.total) * 60000;
+    act({ ...p, total: v, ends: p.ends + diff, left: p.left && Math.max(1, p.left + diff) }, { [k]: v });
+  } else set(k, v);
+}
 setInterval(tick, 250);
 
 // --- Controls
@@ -639,7 +700,7 @@ const show = (input) => {
 const inputs = [...document.querySelectorAll('[data-k]')];
 for (const i of inputs) {
   i.oninput = () => show(i);
-  i.onchange = () => set(i.dataset.k, i.type === 'checkbox' ? i.checked : Number(i.value));
+  i.onchange = () => change(i.dataset.k, i.type === 'checkbox' ? i.checked : Number(i.value));
 }
 function listFavs() {
   $('favs').replaceChildren(...favs().sort().map(n => {
@@ -665,21 +726,12 @@ onChange.push(was => {
   label();
   if (was('sharp') !== get('sharp')) resize();
   if (was('auto') !== get('auto')) lastChange = performance.now();
-  // A new length changes the running phase too, keeping the time already done.
-  if (pom && pom.total !== minutes(pom.phase) && was(pom.phase) !== minutes(pom.phase)) {
-    const diff = (minutes(pom.phase) - pom.total) * 60000;
-    pom.total = minutes(pom.phase);
-    if (pom.left) pom.left = Math.max(1, pom.left + diff); else pom.ends += diff;
-    keep();
-  }
-  // Switched back on: a fresh focus round.
-  if (get('pom') && !was('pom')) begin('work');
   if (!get('pom')) $('big').hidden = true;
   tick();
 });
 apply(state);
 next(0);
-setInterval(() => { if (!document.hidden) pull(); }, 5000);
+setInterval(pull, 5000);
 
 const toggleFull = () => {
   const d = document, e = d.documentElement;
@@ -707,7 +759,7 @@ $('full').onclick = toggleFull;
 let mouse = false;
 addEventListener('pointerdown', e => { mouse = e.pointerType === 'mouse'; }, true);
 canvas.onclick = e => {
-  const side = e.clientX < innerWidth * 0.3 ? -1 : e.clientX > innerWidth * 0.7 ? 1 : 0;
+  const side = resting ? 0 : e.clientX < innerWidth * 0.3 ? -1 : e.clientX > innerWidth * 0.7 ? 1 : 0;
   const showing = !document.body.classList.contains('idle');
   if (!$('panel').hidden) panel('');
   else if (showing && !(mouse && side)) sleep();
@@ -736,6 +788,7 @@ wake();
 addEventListener('keydown', e => {
   if (!$('intro').hidden) return;
   if (/^(INPUT|SELECT)$/.test(e.target.tagName) || (e.target.tagName === 'BUTTON' && e.key === ' ')) return;
+  if (resting && /^( |Arrow)/.test(e.key)) return;
   if (e.key === ' ' || e.key === 'ArrowRight') next(get('blendTap'));
   else if (e.key === 'ArrowLeft') previous();
   else if (e.key === 'f') toggleFull();

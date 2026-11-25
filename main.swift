@@ -257,11 +257,11 @@ final class Server {
             let urls = [wifiAddress(), name].compactMap { $0 }.map { "http://\($0):\(port)/?k=\(key)" }
             send(c, 200, try? JSONEncoder().encode(urls), "application/json")
         default:
-            let files = ["/": "index.html", "/qrcode.js": "", "/butterchurn.min.js": "", "/butterchurnPresets.min.js": "", "/butterchurnPresetsExtra.min.js": ""]
+            let files = ["/": "index.html", "/meadow.jpg": "", "/qrcode.js": "", "/butterchurn.min.js": "", "/butterchurnPresets.min.js": "", "/butterchurnPresetsExtra.min.js": ""]
             guard let f = files[url.path] else { return send(c, 404) }
             let name = f.isEmpty ? String(url.path.dropFirst()) : f
             let data = try? Data(contentsOf: Bundle.main.resourceURL!.appendingPathComponent("web/\(name)"))
-            send(c, 200, data, name.hasSuffix("js") ? "text/javascript" : "text/html; charset=utf-8")
+            send(c, 200, data, name.hasSuffix("js") ? "text/javascript" : name.hasSuffix("jpg") ? "image/jpeg" : "text/html; charset=utf-8")
         }
     }
 
