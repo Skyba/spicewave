@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Butterchurn">
+<title>Butterchurn</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #fff;
+    font: 15px/1.4 -apple-system, system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #bar { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; width: max-content; max-width: calc(100vw - 32px);
+    box-sizing: border-box; padding: 8px; border-radius: 16px; background: rgba(0,0,0,.65); transition: opacity .3s; }
+  #name { width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; font-size: 13px; }
+  button { font: inherit; color: inherit; background: rgba(255,255,255,.14); border: 0; border-radius: 10px; min-width: 44px; height: 44px; padding: 0 14px; }
+  button:active, button.on { background: rgba(255,255,255,.34); }
+  #sync { min-width: 92px; text-align: center; font-variant-numeric: tabular-nums; }
+  #msg { position: fixed; top: calc(20px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px);
+    box-sizing: border-box; padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,.7); text-align: center; }
+  #pair { position: fixed; right: 20px; top: 20px; padding: 14px; border-radius: 16px; background: rgba(0,0,0,.75); text-align: center; transition: opacity .3s; }
+  #pair img { width: 168px; background: #fff; border-radius: 8px; display: block; margin: 0 auto 8px; image-rendering: pixelated; }
+  #pair a { color: #9cf; font-size: 12px; display: block; max-width: 220px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+  .idle #bar, .idle #pair { opacity: 0; pointer-events: none; }
+  .idle { cursor: none; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg" hidden></div>
+<div id="pair" hidden><img src="" alt="QR code for the iPad"><div>Scan with the iPad</div></div>
+<div id="bar">
+  <div id="name"></div>
+  <button id="prev" aria-label="Previous visual">◀</button>
+  <button id="next" aria-label="Next visual">▶</button>
+  <button id="auto">Auto</button>
+  <button id="less" aria-label="Show visuals earlier">−</button><span id="sync"></span><button id="more" aria-label="Show visuals later">+</button>
+  <button id="full">Full screen</button>
+</div>
+<script src="butterchurn.min.js"></script>
+<script src="butterchurnPresets.min.js"></script>
+<script src="butterchurnPresetsExtra.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const key = new URLSearchParams(location.search).get('k') || '';
+const store = {
+  get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+const say = text => { $('msg').textContent = text; $('msg').hidden = !text; };
+
+// Sound arrives as levels from the Mac. An offline context satisfies butterchurn without opening
+// an audio session, so the iPad never takes the headset away from the Mac.
+const lib = window.butterchurn.default || window.butterchurn;
+const canvas = $('c');
+const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+let viz;
+try {
+  viz = lib.createVisualizer(new Offline(2, 1024, 48000), canvas, { width: 800, height: 600 });
+} catch (e) {
+  say('This browser could not start the visuals: ' + e.message);
+  throw e;
+}
+
+function resize() {
+  const r = Math.min(window.devicePixelRatio || 1, 1.5);
+  canvas.width = Math.round(innerWidth * r);
+  canvas.height = Math.round(innerHeight * r);
+  viz.setRendererSize(canvas.width, canvas.height);
+}
+addEventListener('resize', resize);
+resize();
+
+// --- Presets
+const packs = [window.butterchurnPresets, window.butterchurnPresetsExtra].map(p => (p.default || p).getPresets());
+const presets = Object.assign({}, ...packs);
+const names = Object.keys(presets);
+for (let i = names.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [names[i], names[j]] = [names[j], names[i]];
+}
+let current = 0, lastChange = 0, auto = store.get('auto', '1') === '1';
+function show(step, blend) {
+  current = (current + step + names.length) % names.length;
+  lastChange = performance.now();
+  $('name').textContent = names[current];
+  viz.loadPreset(presets[names[current]], blend);
+}
+show(0, 0);
+
+// --- Sound stream: 8 bytes send time (ms) + 3 x 1024 bytes (mono, left, right)
+const SIZE = 8 + 3 * 1024;
+let frames = [], offset = Infinity, lastFrame = 0, lastSound = performance.now(), connected = false;
+let sync = Number(store.get('sync', 150));
+let shown = { timeByteArray: new Uint8Array(1024).fill(128), timeByteArrayL: new Uint8Array(1024).fill(128), timeByteArrayR: new Uint8Array(1024).fill(128) };
+
+function accept(buf) {
+  const now = performance.now();
+  const sent = new DataView(buf.buffer, buf.byteOffset, 8).getFloat64(0, true);
+  offset = Math.min(offset, now - sent);
+  lastFrame = now;
+  const wave = buf.slice(8);
+  if (wave.some(v => v < 126 || v > 130)) lastSound = now;
+  frames.push({ at: sent, wave });
+  if (frames.length > 120) frames.shift();
+}
+
+async function stream() {
+  for (;;) {
+    const abort = new AbortController();
+    const watchdog = setInterval(() => { if (performance.now() - lastFrame > 3000) abort.abort(); }, 1000);
+    try {
+      lastFrame = performance.now();
+      const res = await fetch('audio?k=' + encodeURIComponent(key), { signal: abort.signal, cache: 'no-store' });
+      if (res.status === 403) { say('This link is not valid. Scan the code shown on the Mac again.'); return; }
+      const reader = res.body.getReader();
+      frames = []; offset = Infinity; lastSound = performance.now(); connected = true;
+      const part = new Uint8Array(SIZE);
+      let have = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (let i = 0; i < value.length;) {
+          const n = Math.min(SIZE - have, value.length - i);
+          part.set(value.subarray(i, i + n), have);
+          have += n; i += n;
+          if (have === SIZE) { accept(part); have = 0; }
+        }
+      }
+    } catch {} finally { clearInterval(watchdog); abort.abort(); connected = false; }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+stream();
+
+// --- Drawing
+let lastDraw = performance.now();
+function draw(now) {
+  requestAnimationFrame(draw);
+  // Show the newest frame that is at least `sync` ms old, so visuals match a delayed headset.
+  const target = performance.now() - offset - sync;
+  let hit = -1;
+  while (hit + 1 < frames.length && frames[hit + 1].at <= target) hit++;
+  if (hit >= 0) {
+    const w = frames[hit].wave;
+    shown = { timeByteArray: w.subarray(0, 1024), timeByteArrayL: w.subarray(1024, 2048), timeByteArrayR: w.subarray(2048) };
+    frames.splice(0, hit);
+  }
+  viz.render({ audioLevels: shown, elapsedTime: Math.min((now - lastDraw) / 1000, 0.25) });
+  lastDraw = now;
+  if (auto && performance.now() - lastChange > 25000) show(1, 4);
+}
+requestAnimationFrame(draw);
+
+setInterval(() => {
+  if (!key) say('Open this page from the Butterchurn app on the Mac, or scan its code.');
+  else if (!connected) say('Connecting to the Mac…');
+  else if (performance.now() - lastSound > 6000) say('No sound from the Mac. Play something there. If it is already playing, allow Butterchurn in System Settings → Privacy & Security → Screen & System Audio Recording.');
+  else say('');
+}, 1000);
+
+// --- Controls
+const label = () => { $('sync').textContent = 'Delay ' + sync + ' ms'; $('auto').classList.toggle('on', auto); };
+const nudge = d => { sync = Math.max(0, Math.min(1000, sync + d)); store.set('sync', sync); label(); };
+const toggleFull = () => {
+  const d = document, e = d.documentElement;
+  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  else (e.requestFullscreen || e.webkitRequestFullscreen).call(e);
+};
+$('next').onclick = () => show(1, 2);
+$('prev').onclick = () => show(-1, 2);
+$('auto').onclick = () => { auto = !auto; store.set('auto', auto ? '1' : '0'); lastChange = performance.now(); label(); };
+$('less').onclick = () => nudge(-25);
+$('more').onclick = () => nudge(25);
+$('full').onclick = toggleFull;
+if (navigator.standalone || !(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) $('full').hidden = true;
+label();
+
+let idle;
+function wake() {
+  document.body.classList.remove('idle');
+  clearTimeout(idle);
+  idle = setTimeout(() => document.body.classList.add('idle'), 4000);
+}
+for (const e of ['pointermove', 'pointerdown', 'keydown']) addEventListener(e, wake);
+wake();
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return;
+  if (e.key === ' ' || e.key === 'ArrowRight') show(1, 2);
+  else if (e.key === 'ArrowLeft') show(-1, 2);
+  else if (e.key === 'f') toggleFull();
+});
+
+// --- Pairing code, on the Mac only
+if (location.hostname === 'localhost' && key) {
+  fetch('info?k=' + encodeURIComponent(key)).then(r => r.json()).then(urls => {
+    if (!urls.length) return;
+    $('pair').querySelector('img').src = 'qr.png?k=' + encodeURIComponent(key);
+    for (const u of urls) {
+      const a = document.createElement('a');
+      a.href = u; a.textContent = u;
+      $('pair').append(a);
+    }
+    $('pair').hidden = false;
+  }).catch(() => {});
+}
+</script>
+</body>
+</html>
