@@ -9,6 +9,7 @@ import SystemConfiguration
 
 let port: UInt16 = 8787
 let frameSamples = 1024
+let maxBody = 65536
 
 // Access key: the stream is the Mac's sound, so only devices given the link may read it.
 let key: String = {
@@ -209,8 +210,14 @@ final class Server {
         c.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [unowned self] data, _, done, error in
             let all = buffer + (data ?? Data())
             if let end = all.range(of: Data("\r\n\r\n".utf8)) {
-                respond(c, String(decoding: all[..<end.lowerBound], as: UTF8.self))
-            } else if done || error != nil || all.count > 16384 {
+                let head = String(decoding: all[..<end.lowerBound], as: UTF8.self)
+                let body = all[end.upperBound...]
+                let length = head.split(separator: "\r\n").first { $0.lowercased().hasPrefix("content-length:") }
+                    .flatMap { Int($0.dropFirst(15).trimmingCharacters(in: .whitespaces)) } ?? 0
+                if length < 0 || length > maxBody { return send(c, 413) }
+                if body.count >= length { return respond(c, head, Data(body.prefix(length))) }
+            }
+            if done || error != nil || all.count > 16384 + maxBody {
                 c.cancel()
             } else {
                 read(c, all)
@@ -218,12 +225,26 @@ final class Server {
         }
     }
 
-    private func respond(_ c: NWConnection, _ request: String) {
+    private func respond(_ c: NWConnection, _ request: String, _ body: Data) {
         let parts = request.split(separator: "\r\n").first?.split(separator: " ") ?? []
-        guard parts.count >= 2, parts[0] == "GET", let url = URLComponents(string: String(parts[1])) else { return send(c, 400) }
+        guard parts.count >= 2, parts[0] == "GET" || parts[0] == "POST", let url = URLComponents(string: String(parts[1])) else { return send(c, 400) }
         let allowed = url.queryItems?.first { $0.name == "k" }?.value == key
 
+        if parts[0] == "POST" && url.path != "/state" { return send(c, 405) }
+
         switch url.path {
+        case "/state":
+            // Favorites and settings, shared by every device. A POST merges its keys; null removes one.
+            guard allowed else { return send(c, 403) }
+            var state = UserDefaults.standard.dictionary(forKey: "state") ?? [:]
+            if parts[0] == "POST" {
+                guard let patch = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
+                      patch.values.allSatisfy({ $0 is NSNull || $0 is NSNumber }) else { return send(c, 400) }
+                for (k, v) in patch { state[k] = v is NSNull ? nil : v }
+                guard state.count <= 1000 else { return send(c, 413) }
+                UserDefaults.standard.set(state, forKey: "state")
+            }
+            send(c, 200, try? JSONSerialization.data(withJSONObject: state), "application/json")
         case "/audio":
             guard allowed else { return send(c, 403) }
             let client = Client(c)

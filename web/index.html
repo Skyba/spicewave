@@ -17,14 +17,43 @@
   #name { width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; font-size: 13px; }
   button { font: inherit; color: inherit; background: rgba(255,255,255,.14); border: 0; border-radius: 10px; min-width: 44px; height: 44px; padding: 0 14px; }
   button:active, button.on { background: rgba(255,255,255,.34); }
-  #sync { min-width: 92px; text-align: center; font-variant-numeric: tabular-nums; }
-  #msg { position: fixed; top: calc(20px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px);
+  #msg { position: fixed; bottom: calc(124px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px);
     box-sizing: border-box; padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,.7); text-align: center; }
   #pair { position: fixed; right: 20px; top: 20px; padding: 14px; border-radius: 16px; background: rgba(0,0,0,.75); text-align: center; transition: opacity .3s; }
   #pair img { width: 168px; background: #fff; border-radius: 8px; display: block; margin: 0 auto 8px; image-rendering: pixelated; }
   #pair a { color: #9cf; font-size: 12px; display: block; max-width: 220px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+  #msg button { margin-top: 8px; }
+  #ring { position: fixed; left: calc(18px + env(safe-area-inset-left)); top: calc(18px + env(safe-area-inset-top)); width: 76px; height: 76px; padding: 0;
+    border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; --c: #ff7a59; }
+  #ring.rest { --c: #5ed39a; }
+  #ring.paused { opacity: .55; }
+  #ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  #ring circle { fill: none; stroke-width: 5; stroke: rgba(255,255,255,.2); }
+  #ring circle + circle { stroke: var(--c); stroke-linecap: round; }
+  #left { position: relative; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #big { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;
+    font-weight: 800; font-size: min(24vw, 42vh); line-height: 1; text-shadow: 0 0 .08em #000, 0 0 .3em #000; animation: blink 1s steps(1) 5; }
+  #big small { font-size: .22em; font-weight: 600; margin-bottom: .3em; }
+  @keyframes blink { 0% { opacity: 1; } 60% { opacity: .08; } }
+  #panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(360px, 100vw); box-sizing: border-box; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: calc(18px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) 20px; background: rgba(12,12,16,.92); }
+  #panel header { display: flex; justify-content: space-between; align-items: center; font-size: 20px; font-weight: 700; }
+  #panel h2 { font-size: 13px; font-weight: 600; opacity: .65; margin: 24px 0 4px; }
+  #panel label { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+  #panel label.slide { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 0; }
+  #panel output { font-variant-numeric: tabular-nums; opacity: .8; }
+  #panel input[type=range] { grid-column: 1 / -1; width: 100%; margin: 6px 0; accent-color: #9cf; }
+  #panel input[type=checkbox] { width: 24px; height: 24px; accent-color: #9cf; }
+  #panel select { font: inherit; color: inherit; background: #2b2b33; border: 0; border-radius: 10px; height: 40px; padding: 0 10px; }
+  #panel .row { display: flex; gap: 8px; margin-top: 6px; }
+  #panel .row button { flex: 1; }
+  .fav { display: flex; gap: 6px; margin-top: 6px; }
+  .fav button:first-child { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { opacity: .65; font-size: 14px; margin: 8px 0; }
   .idle #bar, .idle #pair { opacity: 0; pointer-events: none; }
   .idle { cursor: none; }
+  @media (min-width: 960px) { .set #bar { left: calc(50% - 180px); max-width: calc(100vw - 392px); } }
+  .set #pair { opacity: 0; pointer-events: none; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -36,9 +65,35 @@
   <div id="name"></div>
   <button id="prev" aria-label="Previous visual">◀</button>
   <button id="next" aria-label="Next visual">▶</button>
-  <button id="auto">Auto</button>
-  <button id="less" aria-label="Show visuals earlier">−</button><span id="sync"></span><button id="more" aria-label="Show visuals later">+</button>
+  <button id="star" aria-label="Favorite">☆</button>
+  <button id="auto" aria-pressed="true">Auto-change</button>
+  <button id="open">Settings</button>
   <button id="full">Full screen</button>
+</div>
+<button id="ring" hidden>
+  <svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="34"/><circle id="arc" cx="38" cy="38" r="34" pathLength="100" stroke-dasharray="0 100"/></svg>
+  <span id="left"></span>
+</button>
+<div id="big" hidden><small></small><span></span></div>
+<div id="panel" hidden>
+  <header>Settings <button id="close" aria-label="Close settings">✕</button></header>
+  <h2>Changing visuals</h2>
+  <label>Change automatically <input type="checkbox" data-k="auto"></label>
+  <label class="slide">Change every <output></output><input type="range" data-k="every" data-u="s" min="5" max="300" step="5"></label>
+  <label>Favorites only <input type="checkbox" data-k="favOnly"></label>
+  <h2>Blending</h2>
+  <label class="slide">Automatic change <output></output><input type="range" data-k="blendAuto" data-u="s" min="0" max="15" step="0.5"></label>
+  <label class="slide">When I press ◀ ▶ <output></output><input type="range" data-k="blendTap" data-u="s" min="0" max="15" step="0.5"></label>
+  <h2>Pomodoro</h2>
+  <label>Show the timer <input type="checkbox" data-k="pom"></label>
+  <label class="slide">Focus <output></output><input type="range" data-k="work" data-u="min" min="1" max="90" step="1"></label>
+  <label class="slide">Break <output></output><input type="range" data-k="rest" data-u="min" min="1" max="30" step="1"></label>
+  <div class="row"><button id="pause">Pause</button><button id="skip">Skip</button><button id="restart">Restart</button></div>
+  <h2>Display</h2>
+  <label class="slide">Delay to match the headset <output></output><input type="range" data-k="sync" data-u="ms" min="0" max="1000" step="25"></label>
+  <label>Sharpness <select data-k="sharp"><option value="1">Low</option><option value="1.5">Medium</option><option value="2">High</option></select></label>
+  <h2>Favorites</h2>
+  <div id="favs"></div>
 </div>
 <script src="butterchurn.min.js"></script>
 <script src="butterchurnPresets.min.js"></script>
@@ -50,7 +105,49 @@ const store = {
   get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
 };
-const say = text => { $('msg').textContent = text; $('msg').hidden = !text; };
+const say = (text, button) => {
+  if ($('msg').dataset.t === text) return;
+  $('msg').dataset.t = text;
+  $('msg').textContent = text;
+  $('msg').hidden = !text;
+  if (button) $('msg').append(document.createElement('br'), button);
+};
+
+// --- Settings. Kept in this browser, and on the Mac when the page comes from the app, so devices share them.
+// Favorites are separate "fav:<name>" keys so two devices never overwrite each other's list.
+const defaults = { auto: true, every: 25, favOnly: false, blendAuto: 4, blendTap: 2, pom: true, work: 25, rest: 5, sync: 150, sharp: 1.5 };
+let state = {};
+try { state = JSON.parse(store.get('state', '{}')) || {}; } catch {}
+const get = k => state[k] ?? defaults[k];
+const isFav = n => !!state['fav:' + n];
+const favs = () => Object.keys(state).filter(k => k.startsWith('fav:')).map(k => k.slice(4)).filter(n => presets[n]);
+const onChange = [];
+function apply(next) {
+  const old = state;
+  state = next;
+  store.set('state', JSON.stringify(state));
+  const was = k => old[k] ?? defaults[k];
+  onChange.forEach(f => f(was));
+}
+let saving = 0;
+function set(k, v) {
+  const next = { ...state };
+  if (v === null) delete next[k]; else next[k] = v;
+  apply(next);
+  if (!key) return;
+  saving++;
+  fetch('state?k=' + encodeURIComponent(key), { method: 'POST', body: JSON.stringify({ [k]: v }) }).catch(() => {}).finally(() => saving--);
+}
+const flat = o => JSON.stringify(Object.entries(o).sort());
+async function pull() {
+  if (!key || saving) return;
+  try {
+    const r = await fetch('state?k=' + encodeURIComponent(key), { cache: 'no-store' });
+    if (!r.ok) return;
+    const next = await r.json();
+    if (!saving && flat(next) !== flat(state)) apply(next);
+  } catch {}
+}
 
 // Sound arrives as levels from the Mac. An offline context satisfies butterchurn without opening
 // an audio session, so the iPad never takes the headset away from the Mac.
@@ -66,7 +163,7 @@ try {
 }
 
 function resize() {
-  const r = Math.min(window.devicePixelRatio || 1, 1.5);
+  const r = Math.min(window.devicePixelRatio || 1, get('sharp'));
   canvas.width = Math.round(innerWidth * r);
   canvas.height = Math.round(innerHeight * r);
   viz.setRendererSize(canvas.width, canvas.height);
@@ -82,19 +179,27 @@ for (let i = names.length - 1; i > 0; i--) {
   const j = Math.floor(Math.random() * (i + 1));
   [names[i], names[j]] = [names[j], names[i]];
 }
-let current = 0, lastChange = 0, auto = store.get('auto', '1') === '1';
-function show(step, blend) {
-  current = (current + step + names.length) % names.length;
+let current = '', lastChange = 0;
+const back = [];
+function load(name, blend) {
+  current = name;
   lastChange = performance.now();
-  $('name').textContent = names[current];
-  viz.loadPreset(presets[names[current]], blend);
+  viz.loadPreset(presets[name], blend);
+  label();
 }
-show(0, 0);
+function next(blend) {
+  const pool = get('favOnly') && favs().length ? names.filter(isFav) : names;
+  if (current) back.push(current);
+  if (back.length > 100) back.shift();
+  load(pool[(pool.indexOf(current) + 1) % pool.length], blend);
+}
+function previous() {
+  if (back.length) load(back.pop(), get('blendTap'));
+}
 
 // --- Sound stream: 8 bytes send time (ms) + 3 x 1024 bytes (mono, left, right)
 const SIZE = 8 + 3 * 1024;
 let frames = [], offset = Infinity, lastFrame = 0, lastSound = performance.now(), connected = false;
-let sync = Number(store.get('sync', 150));
 let shown = { timeByteArray: new Uint8Array(1024).fill(128), timeByteArrayL: new Uint8Array(1024).fill(128), timeByteArrayR: new Uint8Array(1024).fill(128) };
 
 function accept(buf) {
@@ -134,14 +239,14 @@ async function stream() {
     await new Promise(r => setTimeout(r, 1000));
   }
 }
-stream();
+if (key) stream();
 
 // --- Drawing
-let lastDraw = performance.now();
+let lastDraw = performance.now(), local = null;
 function draw(now) {
   requestAnimationFrame(draw);
-  // Show the newest frame that is at least `sync` ms old, so visuals match a delayed headset.
-  const target = performance.now() - offset - sync;
+  // Show the newest frame that is at least the chosen delay old, so visuals match a delayed headset.
+  const target = performance.now() - offset - get('sync');
   let hit = -1;
   while (hit + 1 < frames.length && frames[hit + 1].at <= target) hit++;
   if (hit >= 0) {
@@ -149,49 +254,194 @@ function draw(now) {
     shown = { timeByteArray: w.subarray(0, 1024), timeByteArrayL: w.subarray(1024, 2048), timeByteArrayR: w.subarray(2048) };
     frames.splice(0, hit);
   }
+  if (local) local();
   viz.render({ audioLevels: shown, elapsedTime: Math.min((now - lastDraw) / 1000, 0.25) });
   lastDraw = now;
-  if (auto && performance.now() - lastChange > 25000) show(1, 4);
+  if (get('auto') && performance.now() - lastChange > get('every') * 1000) next(get('blendAuto'));
+
 }
 requestAnimationFrame(draw);
 
+// --- This computer's own sound, through the browser's share dialog (Chrome or Edge on a PC, Chrome on a Mac)
+const share = document.createElement('button');
+share.textContent = "Share this computer's sound";
+share.onclick = async () => {
+  try {
+    const media = await navigator.mediaDevices.getDisplayMedia({
+      video: true, systemAudio: 'include',
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+    const track = media.getAudioTracks()[0];
+    if (!track) {
+      media.getTracks().forEach(t => t.stop());
+      say('No sound was shared. Try again, choose the entire screen and turn on system audio.', share);
+      return;
+    }
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(new MediaStream([track]));
+    const split = ctx.createChannelSplitter(2);
+    const tap = () => Object.assign(ctx.createAnalyser(), { fftSize: 1024 });
+    const all = tap(), l = tap(), r = tap();
+    src.connect(all); src.connect(split); split.connect(l, 0); split.connect(r, 1);
+    const own = { timeByteArray: new Uint8Array(1024), timeByteArrayL: new Uint8Array(1024), timeByteArrayR: new Uint8Array(1024) };
+    local = () => {
+      all.getByteTimeDomainData(own.timeByteArray);
+      l.getByteTimeDomainData(own.timeByteArrayL);
+      r.getByteTimeDomainData(own.timeByteArrayR);
+      shown = own;
+    };
+    media.getTracks().forEach(t => t.addEventListener('ended', () => { local = null; ctx.close().catch(() => {}); media.getTracks().forEach(x => x.stop()); }));
+  } catch (e) {
+    say('Sharing did not start. Try again and allow it.', share);
+  }
+};
+
+const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 setInterval(() => {
-  if (!key) say('Open this page from the Butterchurn app on the Mac, or scan its code.');
+  if (local) say('');
+  else if (!key && canShare) { if ($('msg').hidden) say('To react to music, choose the entire screen and turn on system audio.', share); }
+  else if (!key) say('This device cannot hear its own music. Scan the code shown by the Mac app.');
   else if (!connected) say('Connecting to the Mac…');
   else if (performance.now() - lastSound > 6000) say('No sound from the Mac. Play something there. If it is already playing, allow Butterchurn in System Settings → Privacy & Security → Screen & System Audio Recording.');
   else say('');
 }, 1000);
 
+// --- Pomodoro: one phase at a time, kept as an end time so it survives reloads and sleep.
+const minutes = phase => get(phase);
+let pom = null;
+try { pom = JSON.parse(store.get('pom', 'null')); } catch {}
+const keep = () => store.set('pom', JSON.stringify(pom));
+const begin = phase => { pom = { phase, total: minutes(phase), ends: Date.now() + minutes(phase) * 60000 }; keep(); };
+const other = phase => phase === 'work' ? 'rest' : 'work';
+let bigTimer;
+function announce() {
+  const big = $('big');
+  clearTimeout(bigTimer);
+  big.hidden = true;
+  void big.offsetWidth; // restarts the blinking
+  big.children[0].textContent = pom.phase === 'work' ? 'Focus' : 'Break';
+  big.children[1].textContent = pom.total + ' min';
+  big.hidden = false;
+  bigTimer = setTimeout(() => { big.hidden = true; }, 5000);
+}
+function flip() { begin(other(pom.phase)); announce(); }
+function tick() {
+  $('ring').hidden = !get('pom');
+  if (!get('pom')) return;
+  if (!pom || !pom.ends) begin('work');
+  if (!pom.left) {
+    const late = Date.now() - pom.ends;
+    // Long past its end (device was off): start over instead of replaying missed rounds.
+    if (late > (get('work') + get('rest')) * 60000) begin('work');
+    else if (late >= 0) flip();
+  }
+  const left = pom.left ?? Math.max(0, pom.ends - Date.now());
+  const s = Math.ceil(left / 1000);
+  $('left').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  $('arc').setAttribute('stroke-dasharray', Math.min(100, 100 * (1 - left / (pom.total * 60000))) + ' 100');
+  $('ring').className = (pom.phase === 'rest' ? 'rest' : '') + (pom.left ? ' paused' : '');
+  $('ring').setAttribute('aria-label', (pom.phase === 'work' ? 'Focus' : 'Break') + ', ' + (pom.left ? 'paused, tap to resume' : 'tap to pause'));
+  $('pause').textContent = pom.left ? 'Resume' : 'Pause';
+}
+function togglePause() {
+  if (pom.left) { pom.ends = Date.now() + pom.left; delete pom.left; }
+  else pom.left = Math.max(1, pom.ends - Date.now());
+  keep(); tick();
+}
+$('ring').onclick = $('pause').onclick = () => { if (get('pom')) togglePause(); };
+$('skip').onclick = () => { if (get('pom')) { flip(); tick(); } };
+$('restart').onclick = () => { if (get('pom')) { begin('work'); tick(); } };
+setInterval(tick, 250);
+
 // --- Controls
-const label = () => { $('sync').textContent = 'Delay ' + sync + ' ms'; $('auto').classList.toggle('on', auto); };
-const nudge = d => { sync = Math.max(0, Math.min(1000, sync + d)); store.set('sync', sync); label(); };
+function label() {
+  $('name').textContent = current;
+  $('star').textContent = isFav(current) ? '★' : '☆';
+  $('star').setAttribute('aria-pressed', isFav(current));
+  $('auto').classList.toggle('on', get('auto'));
+  $('auto').setAttribute('aria-pressed', get('auto'));
+}
+const show = (input) => {
+  const out = input.parentElement.querySelector('output');
+  if (out) out.textContent = input.value + ' ' + input.dataset.u;
+};
+const inputs = [...document.querySelectorAll('[data-k]')];
+for (const i of inputs) {
+  i.oninput = () => show(i);
+  i.onchange = () => set(i.dataset.k, i.type === 'checkbox' ? i.checked : Number(i.value));
+}
+function listFavs() {
+  $('favs').replaceChildren(...favs().sort().map(n => {
+    const row = document.createElement('div'), go = document.createElement('button'), del = document.createElement('button');
+    row.className = 'fav';
+    go.textContent = n;
+    go.onclick = () => { back.push(current); load(n, get('blendTap')); };
+    del.textContent = '✕';
+    del.setAttribute('aria-label', 'Remove favorite');
+    del.onclick = () => set('fav:' + n, null);
+    row.append(go, del);
+    return row;
+  }));
+  if (!favs().length) $('favs').innerHTML = '<p class="empty">None yet. Press ☆ while a visual is showing.</p>';
+}
+onChange.push(was => {
+  for (const i of inputs) {
+    const v = get(i.dataset.k);
+    if (i.type === 'checkbox') i.checked = v; else if (document.activeElement !== i || i.type !== 'range' || was(i.dataset.k) !== v) i.value = v;
+    show(i);
+  }
+  listFavs();
+  label();
+  if (was('sharp') !== get('sharp')) resize();
+  if (was('auto') !== get('auto')) lastChange = performance.now();
+  // A new length changes the running phase too, keeping the time already done.
+  if (pom && pom.total !== minutes(pom.phase) && was(pom.phase) !== minutes(pom.phase)) {
+    const diff = (minutes(pom.phase) - pom.total) * 60000;
+    pom.total = minutes(pom.phase);
+    if (pom.left) pom.left = Math.max(1, pom.left + diff); else pom.ends += diff;
+    keep();
+  }
+  // Switched back on: a fresh focus round.
+  if (get('pom') && !was('pom')) begin('work');
+  if (!get('pom')) $('big').hidden = true;
+  tick();
+});
+apply(state);
+next(0);
+pull();
+setInterval(() => { if (!document.hidden) pull(); }, 5000);
+
 const toggleFull = () => {
   const d = document, e = d.documentElement;
   if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
   else (e.requestFullscreen || e.webkitRequestFullscreen).call(e);
 };
-$('next').onclick = () => show(1, 2);
-$('prev').onclick = () => show(-1, 2);
-$('auto').onclick = () => { auto = !auto; store.set('auto', auto ? '1' : '0'); lastChange = performance.now(); label(); };
-$('less').onclick = () => nudge(-25);
-$('more').onclick = () => nudge(25);
+const panel = open => { $('panel').hidden = !open; document.body.classList.toggle('set', open); wake(); };
+$('next').onclick = () => next(get('blendTap'));
+$('prev').onclick = previous;
+$('star').onclick = () => set('fav:' + current, isFav(current) ? null : true);
+$('auto').onclick = () => set('auto', !get('auto'));
+$('open').onclick = () => panel($('panel').hidden);
+$('close').onclick = () => panel(false);
 $('full').onclick = toggleFull;
+canvas.onclick = () => panel(false);
 if (navigator.standalone || !(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) $('full').hidden = true;
-label();
 
 let idle;
 function wake() {
   document.body.classList.remove('idle');
   clearTimeout(idle);
-  idle = setTimeout(() => document.body.classList.add('idle'), 4000);
+  idle = setTimeout(() => { if ($('panel').hidden) document.body.classList.add('idle'); }, 4000);
 }
 for (const e of ['pointermove', 'pointerdown', 'keydown']) addEventListener(e, wake);
 wake();
 addEventListener('keydown', e => {
-  if (e.target.tagName === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return;
-  if (e.key === ' ' || e.key === 'ArrowRight') show(1, 2);
-  else if (e.key === 'ArrowLeft') show(-1, 2);
+  if (/^(INPUT|SELECT)$/.test(e.target.tagName) || (e.target.tagName === 'BUTTON' && e.key === ' ')) return;
+  if (e.key === ' ' || e.key === 'ArrowRight') next(get('blendTap'));
+  else if (e.key === 'ArrowLeft') previous();
   else if (e.key === 'f') toggleFull();
+  else if (e.key === 's') $('star').click();
+  else if (e.key === 'Escape') panel(false);
 });
 
 // --- Pairing code, on the Mac only
