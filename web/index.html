@@ -86,6 +86,8 @@
     padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); }
   #card h1 { font-size: 34px; line-height: 1.15; margin: 0 0 8px; text-wrap: balance; }
   #card p { margin: 0 0 22px; opacity: .85; font-size: 16px; max-width: 46ch; text-wrap: pretty; }
+  #card h2 { font-size: 20px; margin: 6px 0 6px; }
+  #card p.me { font-style: italic; opacity: .7; margin-top: -10px; }
   #flow { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 14px; max-width: 100%; font-size: 14px; }
   #flow div { border: 1px solid rgba(255,255,255,.35); border-radius: 12px; padding: 10px; }
   #flow div.here { background: #9cf; border-color: #9cf; color: #06101c; font-weight: 600; }
@@ -113,7 +115,7 @@
 <canvas id="c"></canvas>
 <div id="rest" aria-hidden="true"><div><img alt=""></div></div>
 <div id="msg" hidden></div>
-<div id="pair" hidden><img alt="QR code for the iPad"><div>Scan with the iPad</div></div>
+<div id="pair" hidden><img alt="QR code for a tablet or phone"><div>Scan with a tablet or phone</div></div>
 <div id="bar">
   <div id="name"></div>
   <button id="prev" aria-label="Previous visual">◀</button>
@@ -165,7 +167,10 @@
   <div id="flow"></div>
   <p id="how"></p>
   <div id="zones"><div><b>◀</b>Previous</div><div><b>☰</b>Controls</div><div><b>▶</b>Next</div><i></i></div>
-  <p>Tap the left, middle or right of the screen. The ring is a focus timer: tap it to pause, hold it to set its times.</p>
+  <p>Tap the left, middle or right of the screen.</p>
+  <h2>A focus timer</h2>
+  <p>The ring at top right is a pomodoro timer: work for 25 minutes, take a 5-minute break, repeat. It starts the next round by itself. Tap it to pause, hold it to change the times or turn it off.</p>
+  <p class="me">I keep this open next to my work as my pomodoro. Feel free to use it however you like.</p>
   <label><input type="checkbox" id="never"> Never show again</label>
   <button id="enter">Enter the app</button>
 </div></div>
@@ -802,13 +807,13 @@ const here = follow ? 'paired' : !key ? 'alone' : onMac ? 'mac' : 'remote';
 function intro() {
   const box = (t, on) => { const d = document.createElement('div'); d.textContent = t; if (on) d.className = 'here'; return d; };
   const arrow = () => { const a = document.createElement('span'); a.textContent = '→'; return a; };
-  const parts = { remote: ['Music on the Mac', 'Wi-Fi', 'This screen'], mac: ['Music on this Mac', 'This screen', 'iPad'], alone: ['Music on this computer', 'This screen'], paired: ['Music on your computer', 'Direct link', 'This screen'] }[here];
+  const parts = { remote: ['Music on the Mac', 'Wi-Fi', 'This screen'], mac: ['Music on this Mac', 'This screen', 'Tablet'], alone: ['Music on this computer', 'This screen'], paired: ['Music on your computer', 'Direct link', 'This screen'] }[here];
   $('flow').replaceChildren(...parts.flatMap((t, i) => [...(i ? [arrow()] : []), box(t, t === 'This screen')]));
   $('how').textContent = {
     remote: 'The Mac plays the music and sends its sound to this screen over your Wi-Fi, where it becomes the visuals. In Spotify here, choose the Mac as the speaker. Nothing is recorded.',
-    mac: 'Play anything on this Mac and the visuals follow it. To see them on an iPad too, scan the code at top left. Nothing is recorded.',
+    mac: 'Play anything on this Mac and the visuals follow it. To see them on a tablet or phone too, scan the code at top left. Nothing is recorded.',
     paired: 'Your computer plays the music and sends its sound straight to this screen, where it becomes the visuals. In Spotify here, choose that computer as the speaker. Nothing is recorded.',
-    alone: canShare ? "Press “Share this computer's sound” and the visuals follow whatever is playing. A code then appears: scan it with an iPad to show them there too. Nothing is recorded." : 'This device cannot hear its own music. Open bps.basilev.com on a computer, share its sound, and scan the code here.',
+    alone: canShare ? "Press “Share this computer's sound” and the visuals follow whatever is playing. A code then appears: scan it with a tablet or phone to show them there too. Nothing is recorded." : 'This device cannot hear its own music. Open bps.basilev.com on a computer, share its sound, and scan the code here.',
   }[here];
   $('never').checked = false;
   panel('');
