@@ -4,6 +4,7 @@ import CoreAudio
 import Network
 import Security
 import SystemConfiguration
+import WebKit
 
 let port: UInt16 = 8787
 let frameSamples = 1024
@@ -274,9 +275,10 @@ final class Server {
 
 // MARK: - App
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var server: Server?
     var activity: NSObjectProtocol?
+    var relay: WKWebView?
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let menu = NSMenu(), item = NSMenuItem()
@@ -289,6 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical], reason: "Streaming sound levels")
         do {
             server = try Server(audio: SystemAudio())
+            startRelay()
             if !CommandLine.arguments.contains("--quiet") { openPage() }
         } catch {
             NSAlert(error: error).runModal()
@@ -299,6 +302,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ a: NSApplication, hasVisibleWindows: Bool) -> Bool {
         openPage()
         return false
+    }
+
+    // A hidden copy of the page sends the sound to paired iPads and phones, so no browser tab has to stay open.
+    func startRelay() {
+        let config = WKWebViewConfiguration()
+        config.preferences.inactiveSchedulingPolicy = .none
+        relay = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), configuration: config)
+        relay!.navigationDelegate = self
+        loadRelay()
+    }
+
+    func loadRelay() {
+        relay?.load(URLRequest(url: URL(string: "http://localhost:\(port)/?k=\(key)&relay=1")!))
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { loadRelay() }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.loadRelay() }
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.loadRelay() }
     }
 
     @objc func openPage() {

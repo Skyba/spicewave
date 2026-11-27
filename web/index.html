@@ -184,6 +184,8 @@ const $ = id => document.getElementById(id);
 // The page runs in two places: served by the Mac app over plain http (the link carries its key), or from the site.
 const key = location.protocol === 'http:' ? new URLSearchParams(location.search).get('k') || '' : '';
 const onMac = !!key && location.hostname === 'localhost';
+// The Mac app keeps a hidden copy of this page open (relay) that sends to paired devices, so no browser tab is needed.
+const relay = onMac && new URLSearchParams(location.search).has('relay');
 const SITE = location.protocol === 'https:' || location.port === '8788' ? location.origin : 'https://bps.basilev.com';
 const store = {
   get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -377,7 +379,7 @@ function draw(now) {
   if (get('auto') && !resting && performance.now() - lastChange > get('every') * 1000) next(get('blendAuto'));
 
 }
-requestAnimationFrame(draw);
+if (!relay) requestAnimationFrame(draw);
 
 // --- This computer's own sound, through the browser's share dialog (Chrome or Edge on a PC, Chrome on a Mac)
 // An audio worklet keeps sending at full rate when this tab is in the background.
@@ -460,12 +462,12 @@ function signal(room, role, onMessage, onOpen) {
 const inOrder = () => { let last = Promise.resolve(); return f => { last = last.then(f).catch(e => console.warn(e)); }; };
 
 let sendRoom = '', lanHost = '';
+const macRoom = async () => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('spicewave room ' + key))).slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join('');
 const share1 = p => { if (p.ctl.readyState === 'open') p.ctl.send(JSON.stringify({ state })); };
 async function startSending() {
   if (sendRoom) return;
   if (onMac) {
-    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('spicewave room ' + key)));
-    sendRoom = [...h.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join('');
+    sendRoom = await macRoom();
     try { lanHost = new URL((await (await fetch('info?k=' + encodeURIComponent(key))).json())[0]).hostname; } catch {}
   } else {
     sendRoom = store.get('room', '');
@@ -736,7 +738,7 @@ onChange.push(was => {
 });
 apply(state);
 next(0);
-setInterval(pull, 5000);
+setInterval(pull, onMac ? 1000 : 5000);
 
 const toggleFull = () => {
   const d = document, e = d.documentElement;
@@ -827,13 +829,15 @@ $('enter').onclick = () => {
   wake();
 };
 $('again').onclick = intro;
-Promise.race([pull(), new Promise(r => setTimeout(r, 1500))]).then(() => {
+if (!relay) Promise.race([pull(), new Promise(r => setTimeout(r, 1500))]).then(() => {
   if (get('introOff:' + here)) { entered = true; tick(); } else intro();
 });
 
 if (follow) { $('unpair').hidden = false; startReceiving(); }
-if (onMac) {
-  startSending();
+if (relay) startSending();
+// A browser tab on the Mac only shows the code; the app's relay does the sending.
+else if (onMac) {
+  macRoom().then(r => { sendRoom = r; showPair(); });
   // The address on the local network also works, without the internet.
   fetch('info?k=' + encodeURIComponent(key)).then(r => r.json()).then(urls => {
     for (const u of urls.slice(0, 1)) {

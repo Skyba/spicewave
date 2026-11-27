@@ -5,8 +5,8 @@ Music visuals on any screen, with a pomodoro timer. Live at [bps.basilev.com](ht
 A browser cannot hear other apps on an iPad, so a computer supplies the sound:
 
 - **PC, or a Mac with a recent Chrome:** open the site, press "Share this computer's sound", choose the entire screen and turn on system audio.
-- **Mac app:** `./build.sh` installs `~/Applications/Spicewave.app` (macOS 14.4+, Apple silicon), which captures system audio with a Core Audio tap and opens the page on port 8787. Its signature is ad hoc, so macOS may ask for audio permission again after a rebuild.
-- **iPad or any other device:** scan the code the computer shows. The sound goes straight between the two devices over an encrypted WebRTC connection; the site only introduces them. Keep the page open on the computer. Networks that block devices from reaching each other also block this.
+- **Mac app:** `./build.sh` installs `~/Applications/Spicewave.app` (macOS 14.4+, Apple silicon), which captures system audio with a Core Audio tap and opens the page on port 8787. It sends to paired devices by itself from a hidden copy of the page, so no browser tab has to stay open. Its signature is ad hoc, so macOS may ask for audio permission again after a rebuild.
+- **iPad or any other device:** scan the code the computer shows. The sound goes straight between the two devices over an encrypted WebRTC connection; the site only introduces them. On a PC, keep the page open; on a Mac, keep the app running. Networks that block devices from reaching each other also block this.
 
 The Mac app also serves the page on the local network without the internet; that link holds a key. Favorites, settings and the pomodoro timer are kept on the computer and shared with paired devices.
 

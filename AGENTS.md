@@ -1,6 +1,6 @@
 # Spicewave
 
-- `web/` is one page used twice: served by the Mac app (`main.swift`, http, key in the link) and by the site.
+- `web/` is one page used twice: served by the Mac app (`main.swift`, http, key in the link) and by the site. The app also loads it in a hidden WKWebView with `&relay=1`: that copy, not a browser tab, signals and sends to paired devices (no drawing, no intro); a browser tab on the Mac only shows the code.
 - Site: `bps.basilev.com`, Cloudflare Worker `spicewave`, mode Public, deployed from the Mac with `npm run deploy`. Local: `npm run dev` (port 8788). `.env.op` holds 1Password references only.
 - `src/worker.js` only passes WebRTC set-up messages between devices of one room (a Durable Object). No sound, settings or logs are stored.
 - App: `./build.sh`, then restart it (`open -g ~/Applications/Spicewave.app --args --quiet` starts it without opening the browser). The bundle id stays `com.basilev.butterchurn` so saved favorites, the key and the audio permission survive.
