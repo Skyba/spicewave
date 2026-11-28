@@ -12,8 +12,11 @@
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #fff;
     font: 15px/1.4 -apple-system, system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; transition: opacity .6s; }
-  .quiet canvas { opacity: 0; transition: opacity 1.5s; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+    transition: opacity .5s, filter .7s, transform .9s cubic-bezier(.2,.9,.25,1); }
+  /* Music stopped: the picture winds down (see draw), blurs, loses its colour and sinks into the dark. */
+  .quiet canvas { opacity: 0; filter: blur(28px) saturate(0); transform: scale(1.14);
+    transition: opacity 2.8s cubic-bezier(.6,0,.9,.5), filter 2.8s ease-in, transform 2.8s ease-out; }
   #bar { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
     display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; width: max-content; max-width: calc(100vw - 32px);
     box-sizing: border-box; padding: 8px; border-radius: 16px; background: rgba(0,0,0,.65); transition: opacity .3s; }
@@ -364,13 +367,22 @@ if (key) stream();
 
 // --- Drawing
 let lastDraw = performance.now(), resting = false, restSince = 0; // resting: the meadow covers the visuals
-let quiet = false, quietSince = 0; // quiet: no sound for a few seconds, so the visuals fade out and stop
+let quiet = false, quietSince = 0, winding = 0; // quiet: no sound for a few seconds, so the visuals fade out and stop
 function draw(now) {
   requestAnimationFrame(draw);
   if (resting && performance.now() - restSince > 2500) { lastDraw = now; return; }
   const hush = get('fade') && performance.now() - lastSound > 4000 && $('intro').hidden;
   if (hush !== quiet) { quiet = hush; quietSince = performance.now(); document.body.classList.toggle('quiet', quiet); }
-  if (quiet && performance.now() - quietSince > 1600) { lastDraw = now; return; }
+  // While fading out the motion slows to a halt, like a record stopping: fewer frames, each moving less.
+  let speed = 1;
+  if (quiet) {
+    const t = (performance.now() - quietSince) / 2800;
+    if (t >= 1) { lastDraw = now; return; }
+    speed = (1 - t) ** 2;
+    winding += Math.max(speed, 0.08);
+    if (winding < 1) return;
+    winding -= 1;
+  }
   // Show the newest frame that is at least the chosen delay old, so visuals match a delayed headset.
   const target = performance.now() - offset - get('sync');
   let hit = -1;
@@ -380,7 +392,7 @@ function draw(now) {
     shown = { timeByteArray: w.subarray(0, 1024), timeByteArrayL: w.subarray(1024, 2048), timeByteArrayR: w.subarray(2048) };
     frames.splice(0, hit);
   }
-  viz.render({ audioLevels: shown, elapsedTime: Math.min((now - lastDraw) / 1000, 0.25) });
+  viz.render({ audioLevels: shown, elapsedTime: Math.min((now - lastDraw) / 1000, 0.25) * speed });
   lastDraw = now;
   if (get('auto') && !resting && !quiet && performance.now() - lastChange > get('every') * 1000) next(get('blendAuto'));
 
